@@ -1,0 +1,7 @@
+CompileFlags:
+  Add:
+    - -std=c++17 # 可以去掉
+    - --cuda-path=/usr/local/cuda
+    - -xcuda
+    - -L/usr/local/cuda/lib64
+    - -I/usr/local/cuda/include
