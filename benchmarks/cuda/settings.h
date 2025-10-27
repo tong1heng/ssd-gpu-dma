@@ -26,6 +26,7 @@ struct Settings
     uint32_t        domain;
     uint32_t        bus;
     uint32_t        devfn;
+    uint32_t        usedQPCount;
 
     Settings();
     void parseArguments(int argc, char** argv);

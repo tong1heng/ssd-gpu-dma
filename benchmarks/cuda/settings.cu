@@ -326,7 +326,8 @@ void Settings::parseArguments(int argc, char** argv)
         {'t', OptionPtr(new Range(numThreads, 1, 32, "threads", "number of CUDA threads", "32"))},
         {'o', OptionPtr(new Option<const char*>(output, "path", "output", "output read data to file"))},
         {'s', OptionPtr(new Option<uint64_t>(startBlock, "offset", "offset", "number of blocks to offset", "0"))},
-        {'b', OptionPtr(new Option<const char*>(blockDevicePath, "path", "block-device", "path to block device"))}
+        {'b', OptionPtr(new Option<const char*>(blockDevicePath, "path", "block-device", "path to block device"))},
+        {'u', OptionPtr(new Option<uint32_t>(usedQPCount, "count", "qpcount", "used QP count", "1"))},
     };
 
     string optionString;

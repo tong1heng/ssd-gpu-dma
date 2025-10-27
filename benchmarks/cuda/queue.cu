@@ -68,3 +68,55 @@ __host__ DmaPtr prepareQueuePair(QueuePair& qp, const Controller& ctrl, const Se
     return qmem;
 }
 
+__host__ DmaPtr prepareQueuePair(QueuePair& qp, const Controller& ctrl, const Settings& settings, uint16_t qpId)
+{
+    size_t queueMemSize = ctrl.info.page_size * 2;
+    size_t prpListSize = ctrl.info.page_size * settings.numThreads * (settings.doubleBuffered + 1);
+
+    // qmem->vaddr will be already a device pointer after the following call
+    auto qmem = createDma(ctrl.ctrl, NVM_PAGE_ALIGN(queueMemSize + prpListSize, 1UL << 16), settings.cudaDevice, settings.adapter, settings.segmentId);
+
+    // Set members
+    qp.pageSize = ctrl.info.page_size;
+    qp.blockSize = ctrl.ns.lba_data_size;
+    qp.nvmNamespace = ctrl.ns.ns_id;
+    qp.pagesPerChunk = settings.numPages;
+    qp.doubleBuffered = settings.doubleBuffered;
+    
+    qp.prpList = NVM_DMA_OFFSET(qmem, 2);
+    qp.prpListIoAddr = qmem->ioaddrs[2];
+    
+    // Create completion queue
+    int status = nvm_admin_cq_create(ctrl.aq_ref, &qp.cq, qpId, qmem.get(), 0, 0);
+    if (!nvm_ok(status))
+    {
+        throw error(string("Failed to create completion queue: ") + nvm_strerror(status));
+    }
+
+    // Get a valid device pointer for CQ doorbell
+    void* devicePtr = nullptr;
+    cudaError_t err = cudaHostGetDevicePointer(&devicePtr, (void*) qp.cq.db, 0);
+    if (err != cudaSuccess)
+    {
+        throw error(string("Failed to get device pointer") + cudaGetErrorString(err));
+    }
+    qp.cq.db = (volatile uint32_t*) devicePtr;
+
+    // Create submission queue
+    status = nvm_admin_sq_create(ctrl.aq_ref, &qp.sq, &qp.cq, qpId, qmem.get(), 1, 0);
+    if (!nvm_ok(status))
+    {
+        throw error(string("Failed to create submission queue: ") + nvm_strerror(status));
+    }
+
+    // Get a valid device pointer for SQ doorbell
+    err = cudaHostGetDevicePointer(&devicePtr, (void*) qp.sq.db, 0);
+    if (err != cudaSuccess)
+    {
+        throw error(string("Failed to get device pointer") + cudaGetErrorString(err));
+    }
+    qp.sq.db = (volatile uint32_t*) devicePtr;
+
+    return qmem;
+}
+

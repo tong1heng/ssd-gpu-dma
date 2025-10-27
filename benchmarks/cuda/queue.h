@@ -24,4 +24,6 @@ struct __align__(64) QueuePair
 
 __host__ DmaPtr prepareQueuePair(QueuePair& qp, const Controller& ctrl, const Settings& settings);
 
+__host__ DmaPtr prepareQueuePair(QueuePair& qp, const Controller& ctrl, const Settings& settings, uint16_t qpId);
+
 #endif
