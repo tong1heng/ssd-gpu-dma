@@ -40,5 +40,5 @@ cscope.po.out
 
 .cache/*
 .vscode/*
-res/*
+# res/*
 third_party/*

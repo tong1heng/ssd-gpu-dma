@@ -1,0 +1,10 @@
+CUDA device           : 0 NVIDIA A30X (0000:36:00.0)
+Controller page size  : 4096 B
+Namespace block size  : 4096 B
+Number of threads     : 128
+Chunks per thread     : 32
+Pages per chunk       : 1
+Total number of pages : 4096
+Total number of blocks: 4096
+Double buffering      : no
+Unexpected error: Unexpected CUDA error (main): an illegal memory access was encountered
