@@ -585,6 +585,21 @@ void readSingleBufferedQP(QueuePair* qp, const uint64_t ioaddr, void* src, void*
         currChunk += 32;
         ++i;
     }
+
+    // TODO: half time for computation
+}
+
+__global__ static
+void additionalKernel()
+{
+    const uint16_t threadNum = threadIdx.x;
+    const uint16_t warpId = threadNum / 32;
+
+    if (warpId < 32) {  // 32 warps for computation
+        printf("in additionalKernel, thread %u in warp %u\n", threadNum, warpId);
+        unsigned long long wait_time = 200 * 1000;
+        busy_wait_ns(wait_time);
+    }
 }
 
 

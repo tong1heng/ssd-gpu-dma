@@ -1,0 +1,10 @@
+Device 0 has 56 SMs, requesting 4 for green context
+Green context 0 has 4 SMs
+Remaining has 52 SMs
+Launching nop kernels
+nopKernel running on SM 1
+nopKernel running on SM 0
+nopKernel running on SM 0
+nopKernel running on SM 2
+nopKernel running on SM 3
+nopKernel running on SM 2
