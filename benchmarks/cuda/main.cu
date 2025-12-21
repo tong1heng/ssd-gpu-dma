@@ -589,18 +589,18 @@ void readSingleBufferedQP(QueuePair* qp, const uint64_t ioaddr, void* src, void*
     // TODO: half time for computation
 }
 
-__global__ static
-void additionalKernel()
-{
-    const uint16_t threadNum = threadIdx.x;
-    const uint16_t warpId = threadNum / 32;
+// __global__ static
+// void additionalKernel()
+// {
+//     const uint16_t threadNum = threadIdx.x;
+//     const uint16_t warpId = threadNum / 32;
 
-    if (warpId < 32) {  // 32 warps for computation
-        printf("in additionalKernel, thread %u in warp %u\n", threadNum, warpId);
-        unsigned long long wait_time = 200 * 1000;
-        busy_wait_ns(wait_time);
-    }
-}
+//     if (warpId < 32) {  // 32 warps for computation
+//         printf("in additionalKernel, thread %u in warp %u\n", threadNum, warpId);
+//         unsigned long long wait_time = 200 * 1000;
+//         busy_wait_ns(wait_time);
+//     }
+// }
 
 
 __global__ static
@@ -1283,6 +1283,7 @@ int main(int argc, char** argv)
         fprintf(stderr, "Total number of pages : %zu\n", totalPages);
         fprintf(stderr, "Total number of blocks: %zu\n", totalBlocks);
         fprintf(stderr, "Double buffering      : %s\n", settings.doubleBuffered ? "yes" : "no");
+        fprintf(stderr, "Used QP count         : %u\n", settings.usedQPCount);
 
         auto outputBuffer = createBuffer(ctrl.info.page_size * totalPages, settings.cudaDevice);
 
