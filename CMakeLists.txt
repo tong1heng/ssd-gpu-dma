@@ -317,6 +317,7 @@ endif ()
 if (CUDA_FOUND AND NOT no_cuda)
     add_subdirectory ("${benchmarks_root}/latency")
     add_subdirectory ("${benchmarks_root}/cuda")
+    add_subdirectory ("${benchmarks_root}/mock")
     add_custom_target (benchmarks DEPENDS ${benchmark_targets})
 endif ()
 
