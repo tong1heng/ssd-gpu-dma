@@ -186,6 +186,8 @@ nvm_cmd_t* prepareChunk(QueuePair* qp, nvm_cmd_t* last, const uint64_t ioaddr, u
     nvm_cmd_header(&local, threadNum, NVM_IO_READ, nvmNamespace);
     nvm_cmd_data(&local, 1, &prpList, chunkPages, addrs);
     nvm_cmd_rw_blks(&local, currBlock + blockOffset, blocksPerChunk);
+
+    // printf("thread %u: prepareChunkQP ioaddr=0x%llx, prpListAddr=0x%llx, currBlock=%llu\n", threadNum, addrs[0], prpListAddr, currBlock + blockOffset);
     
     *cmd = local;
     __threadfence();
@@ -453,6 +455,98 @@ void readDoubleBuffered(QueuePair* qp, const uint64_t ioaddr, void* src, void* d
     {
         CmdTime* t = &times[i];
         t->size = chunkSize * numThreads;
+        t->submitTime = beforeSubmit1;
+        t->completeTime = afterSync;
+        t->moveTime = afterMove;
+    }
+}
+
+__global__ static
+void readDoubleBufferedQPMultiBlocks(QueuePair* qp, const uint64_t ioaddr, void* src, void* dst, size_t numChunks, uint64_t startBlock, int* errCode, CmdTime** times)
+{
+    const uint16_t threadNum = blockDim.x * blockIdx.x + threadIdx.x;
+    const uint16_t warpId = threadNum / 32;
+    qp = &qp[warpId];   // select QP based on warp id
+    const uint32_t pageSize = qp->pageSize; // 4096
+    const uint32_t chunkPages = qp->pagesPerChunk;
+    const size_t chunkSize = qp->pagesPerChunk * pageSize;  // pages per chunk = settings.numPages = 1
+    nvm_queue_t* sq = &qp->sq;
+
+    uint64_t blockOffset = startBlock;
+
+    uint32_t currChunk = warpId * numChunks;
+    uint32_t WarpChunk = (warpId + 1) * numChunks;
+    bool bufferOffset = false;
+    uint32_t i = 0;
+
+    nvm_cmd_t* last = prepareChunkQPMultiBlocks(qp, nullptr, NVM_ADDR_OFFSET(ioaddr, pageSize, chunkPages * 32 * warpId), bufferOffset, blockOffset, currChunk);
+
+    unsigned long long beforeSubmit1, beforeSubmit2;
+
+    beforeSubmit1 = globaltimer_ns();
+    if (threadNum % 32 == 0)    // warp leader thread
+    {
+        *errCode = 0;
+        nvm_sq_submit(sq);
+    }
+    __syncwarp();
+
+    while (currChunk + 32 < WarpChunk)   // numchunks = settings.numChunks * settings.numThreads = 1024
+    {
+        // Prepare in advance next chunk
+        last = prepareChunkQPMultiBlocks(qp, last, NVM_ADDR_OFFSET(ioaddr, pageSize, chunkPages * 32 * warpId), !bufferOffset, blockOffset, currChunk + 32);
+
+        // Consume completions for the previous window
+        if (threadNum % 32 == 0)
+        {
+            waitForIoCompletionQP(&qp->cq, sq, errCode);
+        }
+        __syncwarp();
+        auto afterSync = globaltimer_ns();
+        beforeSubmit2 = globaltimer_ns();
+        if (threadNum % 32 == 0)
+        {
+            nvm_sq_submit(sq);
+        }
+
+        // Move received chunk
+        // moveBytes(src, 0, dst, currChunk * chunkSize, chunkSize * numThreads);
+        auto afterMove = globaltimer_ns();
+
+        // Record statistics
+        if (times != nullptr && threadNum % 32 == 0)
+        {
+            CmdTime* t = &times[warpId][i];
+            t->size = chunkSize * 32;
+            t->submitTime = beforeSubmit1;
+            t->completeTime = afterSync;
+            t->moveTime = afterMove;
+        }
+        beforeSubmit1 = beforeSubmit2;
+        __syncwarp();
+    
+        // Update position and input buffer
+        bufferOffset = !bufferOffset;
+        currChunk += 32;
+        ++i;
+    }
+
+    // Wait for final buffer to complete
+    if (threadNum % 32 == 0)
+    {
+        waitForIoCompletionQP(&qp->cq, sq, errCode);
+    }
+    __syncwarp();
+    auto afterSync = globaltimer_ns();
+
+    // moveBytes(src, 0, dst, currChunk * chunkSize, chunkSize * numThreads);
+    auto afterMove = globaltimer_ns();
+
+    // Record statistics
+    if (times != nullptr && threadNum % 32 == 0)
+    {
+        CmdTime* t = &times[warpId][i];
+        t->size = chunkSize * 32;
         t->submitTime = beforeSubmit1;
         t->completeTime = afterSync;
         t->moveTime = afterMove;
@@ -1042,8 +1136,9 @@ static double launchNvmKernelQPMultiBlocks(const Controller& ctrl, BufferPtr des
         Event before;
         if (settings.doubleBuffered)
         {
-            // TODO:
-            // readDoubleBufferedQP<<<1, settings.numThreads>>>((QueuePair*) deviceQueue.get(), source->ioaddrs[0], source->vaddr, destination.get(), totalChunks, settings.startBlock, ec, times.get());
+            size_t numThreads = settings.usedQPCount * 32;
+            printf("Launching kernel with %zu threads\n", numThreads);
+            readDoubleBufferedQPMultiBlocks<<<settings.usedQPCount, 32>>>((QueuePair*) deviceQueue.get(), source->ioaddrs[0], source->vaddr, destination.get(), totalChunks, settings.startBlock, ec, d_times);
         }
         else
         {
@@ -1306,8 +1401,8 @@ int main(int argc, char** argv)
             if (settings.usedQPCount == 1) {
                 usecs = launchNvmKernel(ctrl, outputBuffer, settings, properties);
             } else {
-                usecs = launchNvmKernelQP(ctrl, outputBuffer, settings, properties);
-                // usecs = launchNvmKernelQPMultiBlocks(ctrl, outputBuffer, settings, properties);
+                // usecs = launchNvmKernelQP(ctrl, outputBuffer, settings, properties);
+                usecs = launchNvmKernelQPMultiBlocks(ctrl, outputBuffer, settings, properties);
             }
 
             fprintf(stderr, "Event time elapsed    : %.3f µs\n", usecs);
